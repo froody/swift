@@ -29,7 +29,8 @@ const std::vector<std::string> LangOptions::SupportedOSBuildConfigArguments = {
   "watchOS",
   "iOS",
   "Linux",
-  "FreeBSD"
+  "FreeBSD",
+  "Android"
 };
 
 const std::vector<std::string> LangOptions::SupportedArchBuildConfigArguments = {
@@ -99,6 +100,8 @@ std::pair<bool, bool> LangOptions::setTarget(llvm::Triple triple) {
     addTargetConfigOption("os", "watchOS");
   else if (triple.isiOS())
     addTargetConfigOption("os", "iOS");
+  else if (triple.isAndroid())
+    addTargetConfigOption("os", "Android");
   else if (triple.isOSLinux())
     addTargetConfigOption("os", "Linux");
   else if (triple.isOSFreeBSD())
