@@ -112,6 +112,7 @@ KNOWN_SETTINGS=(
     skip-build-watchos          ""               "set to skip building Swift stdlibs for Apple watchOS"
     skip-build-watchos-device   ""               "set to skip building Swift stdlibs for Apple watchOS devices (i.e. build simulators only)"
     skip-build-watchos-simulator ""              "set to skip building Swift stdlibs for Apple watchOS simulators (i.e. build devices only)"
+    skip-build-android          ""               "set to skip building Swift stdlibs for Android"
     skip-build-lldb             ""               "set to skip building LLDB"
     skip-build-llbuild          ""               "set to skip building llbuild"
     skip-build-swiftpm          ""               "set to skip building swiftpm"
@@ -131,6 +132,7 @@ KNOWN_SETTINGS=(
     skip-test-tvos-simulator    ""               "set to skip testing Swift stdlibs for tvOS simulators (i.e. test devices only)"
     skip-test-watchos           ""               "set to skip testing Swift stdlibs for Apple watchOS"
     skip-test-watchos-simulator  ""              "set to skip testing Swift stdlibs for Apple watchOS simulators (i.e. test devices only)"
+    skip-test-android           ""               "set to skip testing Swift stdlibs for Android"
     skip-test-validation        ""               "set to skip validation test suite"
     skip-test-optimized         ""               "set to skip testing the test suite in optimized mode"
     stress-test-sourcekit       ""               "set to run the stress-SourceKit target"
@@ -179,7 +181,7 @@ KNOWN_SETTINGS=(
     swift-enable-target-android "1"              "Enable compiler support for targeting Android"
     swift-runtime-enable-dtrace "0"              "Enable runtime dtrace support"
     swift-runtime-enable-leak-checker   "0"              "Enable leaks checking routines in the runtime"
-    use-gold-linker             "1"               "Enable using the gold linker"
+    use-gold-linker             ""               "Enable using the gold linker"
     darwin-toolchain-bundle-identifier ""        "CFBundleIdentifier for xctoolchain info plist"
     darwin-toolchain-display-name      ""        "Display Name for xctoolcain info plist"
     darwin-toolchain-name              ""        "Directory name for xctoolchain"
@@ -806,6 +808,11 @@ case "$(uname -s -m)" in
         ;;
 esac
 
+if [[ ! -z "${NATIVE_LLVM_TOOLS_PATH}" && ! -z "${NATIVE_CLANG_TOOLS_PATH}" && !  -z "${NATIVE_SWIFT_TOOLS_PATH}" ]] ; then
+    echo "GOT NATIVE TOOLS YEAH"
+    NATIVE_TOOLS_DEPLOYMENT_TARGETS=()
+fi
+
 # Sanitize the list of cross-compilation targets.
 for t in ${CROSS_COMPILE_TOOLS_DEPLOYMENT_TARGETS} ; do
     case ${t} in
@@ -869,6 +876,8 @@ case "$(uname -s -m)" in
             "iphoneos-armv7"
             "appletvos-arm64"
             "watchos-armv7k"
+
+            "android-armv7"
         )
         ;;
 
@@ -1015,14 +1024,16 @@ for deployment_target in "${STDLIB_DEPLOYMENT_TARGETS[@]}"; do
             test_this_target=$(not ${SKIP_TEST_WATCHOS_SIMULATOR})
             ;;
         android-*)
-            build_for_this_target=1
-            test_this_target=1
+            build_for_this_target=$(not ${SKIP_BUILD_ANDROID})
+            test_this_target=$(not ${SKIP_TEST_ANDROID})
             ;;
         *)
             echo "Unknown compiler deployment target: ${deployment_target}"
             exit 1
             ;;
     esac
+    set -x
+
     if [[ "${build_for_this_target}" ]] ; then
         SWIFT_STDLIB_TARGETS=(
             "${SWIFT_STDLIB_TARGETS[@]}" "swift-stdlib-${deployment_target}")
@@ -1082,22 +1093,6 @@ if [[ "${DISTCC}" ]] ; then
     # On some platforms, 'pump' may be unrelated to distcc, in which case it's
     # called 'distcc-pump'.
     DISTCC_PUMP="$(which distcc-pump || which pump)"
-    COMMON_CMAKE_OPTIONS=(
-        "${COMMON_CMAKE_OPTIONS[@]}"
-        -DCMAKE_C_COMPILER:PATH="$(which distcc)"
-        -DCMAKE_C_COMPILER_ARG1="${HOST_CC}"
-        -DCMAKE_CXX_COMPILER:PATH="$(which distcc)"
-        -DCMAKE_CXX_COMPILER_ARG1="${HOST_CXX}"
-    )
-else
-    COMMON_CMAKE_OPTIONS=(
-        "${COMMON_CMAKE_OPTIONS[@]}"
-        -DCMAKE_C_COMPILER:PATH="${HOST_CC}"
-        -DCMAKE_CXX_COMPILER:PATH="${HOST_CXX}"
-    )
-fi
-
-if [[ "${DISTCC}" ]] ; then
     BUILD_ARGS="${BUILD_ARGS} -j $(distcc -j)"
 fi
 
@@ -1244,7 +1239,7 @@ function common_cross_c_flags() {
             echo "-arch armv7k -mwatchos-version-min=${DARWIN_DEPLOYMENT_VERSION_WATCHOS}"
             ;;
         android-armv7)
-            echo "-arch armv7"
+            echo ""
             ;;
     esac
 }
@@ -1377,6 +1372,9 @@ fi
 # Start with native deployment targets because the resulting tools are used during cross-compilation.
 for deployment_target in "${NATIVE_TOOLS_DEPLOYMENT_TARGETS[@]}" "${CROSS_TOOLS_DEPLOYMENT_TARGETS[@]}"; do
     set_deployment_target_based_options
+    
+    echo "building dep target ${deployment_target}"
+
 
     case "${COMPILER_VENDOR}" in
         none)
@@ -1471,6 +1469,35 @@ for deployment_target in "${NATIVE_TOOLS_DEPLOYMENT_TARGETS[@]}" "${CROSS_TOOLS_
         unset skip_build
         build_dir=$(build_directory ${deployment_target} ${product})
         build_targets=(all)
+
+        if [[ $(is_cross_tools_deployment_target ${deployment_target}) ]] ; then
+        # TODO(tom) customise per target
+            COMMON_C_FLAGS="-B /Users/tbirch/src/android-ndk-r10e/toolchains/arm-linux-androideabi-4.9/prebuilt/darwin-x86_64/arm-linux-androideabi/bin/"
+            
+            COMMON_CMAKE_OPTIONS=(
+                "${COMMON_CMAKE_OPTIONS[@]}"
+                -DCMAKE_TOOLCHAIN_FILE="${SWIFT_SOURCE_DIR}/cmake/modules/Toolchain-android.cmake"
+                -DCMAKE_EXE_LINKER_FLAGS="-lc++_shared"
+                -DCMAKE_SHARED_LINKER_FLAGS="-lc++_shared"
+                -DLLVM_NATIVE_BUILD="../llvm-macosx-x86_64/"
+            )
+
+        elif [[ "${DISTCC}" ]] ; then
+            COMMON_CMAKE_OPTIONS=(
+                "${COMMON_CMAKE_OPTIONS[@]}"
+                -DCMAKE_C_COMPILER:PATH="$(which distcc)"
+                -DCMAKE_C_COMPILER_ARG1="${HOST_CC}"
+                -DCMAKE_CXX_COMPILER:PATH="$(which distcc)"
+                -DCMAKE_CXX_COMPILER_ARG1="${HOST_CXX}"
+            )
+        else
+            COMMON_CMAKE_OPTIONS=(
+                "${COMMON_CMAKE_OPTIONS[@]}"
+                -DCMAKE_C_COMPILER:PATH="${HOST_CC}"
+                -DCMAKE_CXX_COMPILER:PATH="${HOST_CXX}"
+            )
+        fi
+
         cmake_options=("${COMMON_CMAKE_OPTIONS[@]}")
 
         # Add in gold linker support if requested.
@@ -1518,6 +1545,7 @@ for deployment_target in "${NATIVE_TOOLS_DEPLOYMENT_TARGETS[@]}" "${CROSS_TOOLS_
 
         case ${product} in
             cmark)
+                echo "config build cmark"
                 cmake_options=(
                   "${cmake_options[@]}"
                   -DCMAKE_BUILD_TYPE:STRING="${LLVM_BUILD_TYPE}"
@@ -1533,6 +1561,8 @@ for deployment_target in "${NATIVE_TOOLS_DEPLOYMENT_TARGETS[@]}" "${CROSS_TOOLS_
                 if [ "${BUILD_LLVM}" == "0" ] ; then
                     build_targets=(clean)
                 fi
+                set -x
+                echo "taco llvm ${SKIP_BUILD_LLVM}, ${BUILD_SWIFT_TOOLS},"
                 if [ "${SKIP_BUILD_LLVM}" ] ; then
                     # We can't skip the build completely because the standalone
                     # build of Swift depend on these.
@@ -1669,6 +1699,8 @@ for deployment_target in "${NATIVE_TOOLS_DEPLOYMENT_TARGETS[@]}" "${CROSS_TOOLS_
                     )
                 fi
 
+                set -x
+                echo "build  yo ${SWIFT_STDLIB_TARGETS[@]}"
                 build_targets=(all "${SWIFT_STDLIB_TARGETS[@]}")
                 if [[ $(true_false "${build_perf_testsuite_this_time}") == "TRUE" ]]; then
                     native_swift_tools_path=$(build_directory macosx-x86_64 swift)/bin
@@ -1872,6 +1904,7 @@ for deployment_target in "${NATIVE_TOOLS_DEPLOYMENT_TARGETS[@]}" "${CROSS_TOOLS_
         fi
 
         # Build.
+        echo "real build ${product} - ${skip_build}"
         if [[ ! "${skip_build}" ]]; then
             if [[ "${CMAKE_GENERATOR}" == "Xcode" ]] ; then
                 # Xcode generator uses "ALL_BUILD" instead of "all".

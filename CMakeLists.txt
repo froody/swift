@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.8.12)
 
+message("in the beginning yo ${LLVM_LIBRARY_DIR}, ${CLANG_VERSION}, ")
 # Add path for custom CMake modules.
 list(APPEND CMAKE_MODULE_PATH
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
@@ -296,12 +297,14 @@ include(SwiftSharedCMakeConfig)
 # external library.
 if(SWIFT_BUILT_STANDALONE)
   swift_common_standalone_build_config(SWIFT SWIFT_CROSS_COMPILING)
+message("cactus-1 yo ${LLVM_LIBRARY_DIR}, ${CLANG_VERSION}, ")
 else()
   swift_common_unified_build_config(SWIFT)
+message("cactus-2 yo ${LLVM_LIBRARY_DIR}, ${CLANG_VERSION}, ")
 endif()
 
 if(NOT EXISTS "${CLANG_MAIN_INCLUDE_DIR}/clang/AST/Decl.h")
-  message(FATAL_ERROR "Clang is missing from llvm/tools subdirectory.")
+  message(STATUS "Clang is missing from llvm/tools subdirectory.")
 endif()
 
 # This could be computed using ${CMAKE_CFG_INTDIR} if we want to link Swift
@@ -309,6 +312,8 @@ endif()
 # flexible and allow linking a debug Swift against optimized LLVM.
 set(LLVM_RUNTIME_OUTPUT_INTDIR "${LLVM_BINARY_DIR}")
 set(LLVM_LIBRARY_OUTPUT_INTDIR "${LLVM_LIBRARY_DIR}")
+
+message("cactus1 yo ${LLVM_LIBRARY_DIR}, ${CLANG_VERSION}, ")
 
 set(SWIFT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(SWIFT_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
@@ -414,7 +419,21 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
   set(SWIFT_PRIMARY_VARIANT_SDK_default "LINUX")
 
   # FIXME: This will not work while trying to cross-compile.
-  if("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
+  is_sdk_requested(ANDROID swift_build_android)
+  if(swift_build_android)
+    configure_sdk_unix(ANDROID "Android" "android" "android" "armv7" "armv7-none-linux-androideabi")
+    if(NOT "${ANDROID_NDK_ROOT}" STREQUAL "")
+      set(SWIFT_SDK_ANDROID_PATH "${ANDROID_NDK_ROOT}/platforms/android-21/arch-arm")
+      set(SWIFT_ANDROID_NDK_PATH "${ANDROID_NDK_ROOT}")
+    elseif(NOT "${SWIFT_ANDROID_NDK_PATH}" STREQUAL "")
+      set(SWIFT_SDK_ANDROID_PATH "${SWIFT_ANDROID_NDK_PATH}/platforms/android-16/arch-arm")
+    else()
+      message(FATAL_ERROR "ANDROID_NDK_ROOT and environmental variable ANDROID_NDK_HOME not set")
+    endif()
+
+    set(SWIFT_PRIMARY_VARIANT_SDK_default "ANDROID")
+    set(SWIFT_PRIMARY_VARIANT_ARCH_default "armv7")
+  elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
     set(SWIFT_HOST_VARIANT_ARCH "x86_64")
     set(swift_can_crosscompile_stdlib TRUE)
 
@@ -425,17 +444,6 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
       set(SWIFT_PRIMARY_VARIANT_ARCH_default "x86_64")
     endif()
 
-    is_sdk_requested(ANDROID swift_build_android)
-    if(swift_build_android AND ${swift_can_crosscompile_stdlib})
-      if("${SWIFT_ANDROID_NDK_PATH}" STREQUAL "")
-        message(FATAL_ERROR "environmental variable ANDROID_NDK_HOME not set")
-      endif()
-      configure_sdk_unix(ANDROID "Android" "android" "android" "armv7" "armv7-none-linux-androideabi")
-      set(SWIFT_SDK_ANDROID_PATH "${SWIFT_ANDROID_NDK_PATH}/platforms/android-16/arch-arm")
-
-      set(SWIFT_PRIMARY_VARIANT_SDK_default "ANDROID")
-      set(SWIFT_PRIMARY_VARIANT_ARCH_default "armv7")
-    endif()
   # FIXME: This only matches ARMv7l (by far the most common variant).
   elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "armv7l")
     configure_sdk_unix(LINUX "Linux" "linux" "linux" "armv7" "armv7-unknown-linux-gnueabihf")
