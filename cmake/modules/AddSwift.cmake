@@ -139,6 +139,10 @@ function(_add_variant_swift_compile_flags
       "-sdk" "${SWIFT_SDK_${sdk}_PATH}"
       "-target" "${SWIFT_SDK_${sdk}_ARCH_${arch}_TRIPLE}")
 
+  if (CMAKE_CROSSCOMPILING)
+    list(APPEND result "-resource-dir" "${SWIFT_LIBRARY_OUTPUT_INTDIR}/swift")
+  endif ()
+
   if("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
     list(APPEND result
         "-F" "${SWIFT_SDK_${sdk}_PATH}/../../../Developer/Library/Frameworks")
@@ -158,6 +162,10 @@ function(_add_variant_swift_compile_flags
 
   if(enable_assertions)
     list(APPEND result "-D" "INTERNAL_CHECKS_ENABLED")
+  endif()
+
+  if("${sdk}" STREQUAL ANDROID)
+      list(APPEND result "-I" "${SWIFT_ANDROID_NDK_PATH}/toolchains/llvm-3.6/prebuilt/darwin-x86_64/lib/clang/3.6/include")
   endif()
 
   set("${result_var_name}" "${result}" PARENT_SCOPE)

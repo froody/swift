@@ -525,6 +525,11 @@ also build for Apple watchos, but disallow tests that require an watchOS device"
         default="false",  # so CMake can see the inert mode as a false value
         dest="swift_analyze_code_coverage")
 
+    parser.add_argument("--linux-arm",
+        help="""
+also build for Linux-arm""",
+        action="store_true")
+
     parser.add_argument("--build-subdir",
         help="""
 name of the directory under $SWIFT_BUILD_ROOT where the build products will be
@@ -722,6 +727,11 @@ the number of parallel build jobs to use""",
     if args.skip_build_benchmarks:
         build_script_impl_inferred_args += [
             "--skip-build-benchmarks"
+        ]
+
+    if not args.linux_arm:
+        build_script_impl_inferred_args += [
+            "--skip-build-linux-arm"
         ]
 
     if args.skip_build:

@@ -6,7 +6,9 @@ set(sources
 set(output_dir "${SWIFTLIB_DIR}/glibc")
 
 # Set correct paths to glibc headers
-set(GLIBC_INCLUDE_PATH "/usr/include")
+#set(GLIBC_INCLUDE_PATH "/usr/include")
+set(GLIBC_INCLUDE_PATH "${CMAKE_SYSROOT}/usr/include")
+
 if(CMAKE_LIBRARY_ARCHITECTURE)
   set(GLIBC_ARCH_INCLUDE_PATH "${GLIBC_INCLUDE_PATH}/${CMAKE_LIBRARY_ARCHITECTURE}")
 else()
@@ -44,4 +46,5 @@ add_swift_library(swiftGlibc IS_SDK_OVERLAY
     ${sources}
     FILE_DEPENDS copy_glibc_module "${output_dir}"
     TARGET_SDKS LINUX
+    SWIFT_COMPILE_FLAGS "-I" "${GLIBC_INCLUDE_PATH}" "-I" "${GLIBC_ARCH_INCLUDE_PATH}" "-I" "${CMAKE_SYSROOT}/usr/lib/gcc/arm-linux-gnueabihf/4.8/include"
     INSTALL_IN_COMPONENT stdlib-experimental)
