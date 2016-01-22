@@ -491,6 +491,11 @@ also build for tvOS, but disallow tests that require an tvos device""",
 also build for Apple watchos, but disallow tests that require an watchOS device""",
         action="store_true")
 
+    parser.add_argument("--android",
+        help="""
+also build for Android""",
+        action="store_true")
+
     parser.add_argument("--build-subdir",
         help="""
 name of the directory under $SWIFT_BUILD_ROOT where the build products will be
@@ -666,6 +671,12 @@ the number of parallel build jobs to use""",
         build_script_impl_inferred_args += [
             "--skip-build-foundation"
         ]
+
+    if not args.android:
+        build_script_impl_inferred_args += [
+            "--skip-build-android"
+        ]
+
 
     if args.skip_build:
         build_script_impl_inferred_args += [
