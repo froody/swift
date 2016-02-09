@@ -423,7 +423,18 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
   set(SWIFT_PRIMARY_VARIANT_SDK_default "LINUX")
 
   # FIXME: This will not work while trying to cross-compile.
-  if("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
+  is_sdk_requested(ANDROID swift_build_android)
+
+  if(swift_build_android)
+    if("${SWIFT_ANDROID_NDK_PATH}" STREQUAL "")
+      message(FATAL_ERROR "environmental variable ANDROID_NDK_HOME not set")
+    endif()
+    configure_sdk_unix(ANDROID "Android" "android" "android" "armv7" "armv7-none-linux-androideabi")
+    set(SWIFT_SDK_ANDROID_PATH "${SWIFT_ANDROID_NDK_PATH}/platforms/android-16/arch-arm")
+
+    set(SWIFT_PRIMARY_VARIANT_SDK_default "ANDROID")
+    set(SWIFT_PRIMARY_VARIANT_ARCH_default "armv7")
+  elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
     set(SWIFT_HOST_VARIANT_ARCH "x86_64")
     set(SWIFT_PRIMARY_VARIANT_ARCH_default "x86_64")
 
@@ -434,18 +445,6 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
       configure_sdk_unix(LINUX "Linux" "linux" "linux" "x86_64" "x86_64-unknown-linux-gnu")
       set(SWIFT_PRIMARY_VARIANT_SDK_default "LINUX")
       set(SWIFT_PRIMARY_VARIANT_ARCH_default "x86_64")
-    endif()
-
-    is_sdk_requested(ANDROID swift_build_android)
-    if(swift_build_android AND ${swift_can_crosscompile_stdlib})
-      if("${SWIFT_ANDROID_NDK_PATH}" STREQUAL "")
-        message(FATAL_ERROR "environmental variable ANDROID_NDK_HOME not set")
-      endif()
-      configure_sdk_unix(ANDROID "Android" "android" "android" "armv7" "armv7-none-linux-androideabi")
-      set(SWIFT_SDK_ANDROID_PATH "${SWIFT_ANDROID_NDK_PATH}/platforms/android-16/arch-arm")
-
-      set(SWIFT_PRIMARY_VARIANT_SDK_default "ANDROID")
-      set(SWIFT_PRIMARY_VARIANT_ARCH_default "armv7")
     endif()
 
   # FIXME: This only matches ARMv6l (by far the most common variant).

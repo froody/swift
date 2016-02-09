@@ -155,7 +155,7 @@ else()
       ${ICU_UC_LIBRARY} ${ICU_I18N_LIBRARY})
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(SWIFT_PRIMARY_VARIANT_SDK STREQUAL "LINUX")
   find_package(BSD REQUIRED)
   list(APPEND swift_core_private_link_libraries
       ${ICU_UC_LIBRARY} ${ICU_I18N_LIBRARY})

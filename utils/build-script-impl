@@ -197,7 +197,8 @@ KNOWN_SETTINGS=(
     swift-enable-target-android "1"              "Enable compiler support for targeting Android"
     swift-runtime-enable-dtrace "0"              "Enable runtime dtrace support"
     swift-runtime-enable-leak-checker   "0"              "Enable leaks checking routines in the runtime"
-    use-gold-linker             "1"               "Enable using the gold linker"
+    use-gold-linker             ""               "Enable using the gold linker"
+    use-bfd-linker              ""               "Enable using the gold linker"
     darwin-toolchain-bundle-identifier ""        "CFBundleIdentifier for xctoolchain info plist"
     darwin-toolchain-display-name      ""        "Display Name for xctoolcain info plist"
     darwin-toolchain-name              ""        "Directory name for xctoolchain"
@@ -208,6 +209,7 @@ KNOWN_SETTINGS=(
     build-jobs ""                                "The number of parallel build jobs to use"
     darwin-toolchain-alias             ""        "Swift alias for toolchain"
     export-compile-commands            ""        "set to generate JSON compilation databases for each build product"
+    pkg-config-paths                   ""        "Colon-separate list of paths to add to PKG_CONFIG_PATH"
 )
 
 function toupper() {
@@ -1292,7 +1294,7 @@ function common_cross_c_flags() {
             echo "-arch armv7k -mwatchos-version-min=${DARWIN_DEPLOYMENT_VERSION_WATCHOS}"
             ;;
         android-armv7)
-            echo "-arch armv7"
+            echo ""
             ;;
     esac
 }
@@ -1382,6 +1384,20 @@ function set_swiftpm_bootstrap_command() {
     if [[ ! "${SKIP_BUILD_XCTEST}" ]] ; then
         swiftpm_bootstrap_command=("${swiftpm_bootstrap_command[@]}" --xctest="${XCTEST_BUILD_DIR}")
     fi
+}
+
+function get_pkg_config_path() {
+    FIND_RESULT=$(find $1 -name pkgconfig -type d -print0 | xargs -0 printf '%s:')
+    IFS=':'
+    for e in $PKG_CONFIG_PATHS; do
+        eval e=$e # expand ~ in path
+        EXTRA+="$(realpath $e):"
+    done
+    IFS=
+    for p in $FIND_RESULT $EXTRA; do
+        RESULT+="${p}"
+    done
+    echo $RESULT | sed 's/:$//'
 }
 
 mkdir -p "${BUILD_DIR}"
@@ -1524,24 +1540,21 @@ for deployment_target in ${BUILD_HOST_TARGET} ${CROSS_TOOLS_DEPLOYMENT_TARGETS[@
 
         if [[ $(is_cross_tools_deployment_target ${deployment_target}) ]] ; then
         # TODO(tom) customise per target
-            #COMMON_C_FLAGS="-B /Users/tbirch/src/android-ndk-r10e/toolchains/arm-linux-androideabi-4.9/prebuilt/darwin-x86_64/arm-linux-androideabi/bin/"
-
             eval CROSS_COMPILE_SYSROOT=${CROSS_COMPILE_SYSROOT}
             eval CROSS_COMPILE_TOOLCHAIN_BIN=${CROSS_COMPILE_TOOLCHAIN_BIN}
             CROSS_COMPILE_SYSROOT=$(realpath ${CROSS_COMPILE_SYSROOT})
             CROSS_COMPILE_TOOLCHAIN_BIN=$(realpath ${CROSS_COMPILE_TOOLCHAIN_BIN})
+
             # Allows find_package to find packages in the sysroot
-            PKG_CONFIG_PATH=$(find "${CROSS_COMPILE_SYSROOT}" -name pkgconfig -type d | perl -pe 's/\n/:/g' | sed 's/:$//')
+            PKG_CONFIG_PATH=$(get_pkg_config_path ${CROSS_COMPILE_SYSROOT})
             export PKG_CONFIG_PATH
-            COMMON_C_FLAGS="-B ${CROSS_COMPILE_TOOLCHAIN_BIN}"
-            COMMON_C_FLAGS="${COMMON_C_FLAGS} -B ${CROSS_COMPILE_SYSROOT}/usr/lib/gcc/arm-linux-gnueabihf/4.8"
+
+            COMMON_C_FLAGS="-B ${CROSS_COMPILE_TOOLCHAIN_BIN} "
 
             COMMON_CMAKE_OPTIONS=(
                 "${COMMON_CMAKE_OPTIONS[@]}"
-                -DCMAKE_TOOLCHAIN_FILE="${SWIFT_SOURCE_DIR}/cmake/modules/Toolchain-linux-arm.cmake"
+                -DCMAKE_TOOLCHAIN_FILE="${SWIFT_SOURCE_DIR}/cmake/modules/Toolchain-android.cmake"
                 -DLLVM_NATIVE_BUILD="../llvm-macosx-x86_64/"
-                -DCMAKE_C_COMPILER:PATH="${HOST_CC}"
-                -DCMAKE_CXX_COMPILER:PATH="${HOST_CXX}"
                 -DCMAKE_SYSROOT:PATH="${CROSS_COMPILE_SYSROOT}"
                 -DCMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN:PATH="${CROSS_COMPILE_TOOLCHAIN_BIN}"
             )
@@ -1565,15 +1578,25 @@ for deployment_target in ${BUILD_HOST_TARGET} ${CROSS_TOOLS_DEPLOYMENT_TARGETS[@
         cmake_options=("${COMMON_CMAKE_OPTIONS[@]}")
 
         # Add in gold linker support if requested.
-        if [[ "${USE_GOLD_LINKER}" ]]; then
-            echo "${product}: using gold linker"
-            if [[ "${product}" != "swift" ]]; then
-                # All other projects override the linker flags to add in
-                # gold linker support.
+        echo "dep = '${deployment_target}'"
+        if [[ ${deployment_target} =~ (linux|android).* ]]; then
+            if [[ "${USE_GOLD_LINKER}" ]] ; then
+                echo "${product}: using gold linker"
+                if [[ "${product}" != "swift" ]]; then
+                    # All other projects override the linker flags to add in
+                    # gold linker support.
+                    cmake_options=(
+                        "${cmake_options[@]}"
+                        -DCMAKE_EXE_LINKER_FLAGS:STRING="-fuse-ld=gold"
+                        -DCMAKE_SHARED_LINKER_FLAGS:STRING="-fuse-ld=gold"
+                    )
+                fi
+            elif [[ "${USE_BFD_LINKER}" ]] ; then
+                echo "${product}: using bfd linker"
                 cmake_options=(
                     "${cmake_options[@]}"
-                    -DCMAKE_EXE_LINKER_FLAGS:STRING="-fuse-ld=gold"
-                    -DCMAKE_SHARED_LINKER_FLAGS:STRING="-fuse-ld=gold"
+                    -DCMAKE_EXE_LINKER_FLAGS:STRING="-fuse-ld=bfd"
+                    -DCMAKE_SHARED_LINKER_FLAGS:STRING="-fuse-ld=bfd"
                 )
             fi
         else
@@ -1670,6 +1693,12 @@ for deployment_target in ${BUILD_HOST_TARGET} ${CROSS_TOOLS_DEPLOYMENT_TARGETS[@
                     cmake_options=(
                         "${cmake_options[@]}"
                         -DSWIFT_ENABLE_GOLD_LINKER=TRUE
+                    )
+                elif [[ "${USE_BFD_LINKER}" ]] ; then
+                    cmake_options=(
+                        "${cmake_options[@]}"
+                        -DCMAKE_EXE_LINKER_FLAGS:STRING="-fuse-ld=bfd"
+                        -DCMAKE_SHARED_LINKER_FLAGS:STRING="-fuse-ld=bfd"
                     )
                 fi
 

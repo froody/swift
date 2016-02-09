@@ -19,7 +19,7 @@ add_custom_target(swift-stdlib
 add_custom_target(swift-test-stdlib ALL
     DEPENDS "swift-test-stdlib${SWIFT_PRIMARY_VARIANT_SUFFIX}")
 
-if(SWIFT_HOST_VARIANT STREQUAL "linux")
+if(SWIFT_PRIMARY_VARIANT_SDK STREQUAL "LINUX")
   find_package(BSD REQUIRED)
 endif()
 

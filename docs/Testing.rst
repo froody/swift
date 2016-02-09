@@ -109,8 +109,8 @@ Running tests hosted on an Android device
 You may run tests targeting android-armv7 by connecting a device to run the
 tests on, then pushing the necessary dependencies to that device.
 
-1. Connect your Android device to your computer via USB. Ensure that `remote
-   debugging is enabled<https://developer.chrome.com/devtools/docs/remote-debugging>`_
+1. Connect your Android device to your computer via USB. Ensure that ``remote
+   debugging is enabled<https://developer.chrome.com/devtools/docs/remote-debugging>``
    for that device.
 2. Confirm the device is connected by running ``adb devices``. You should see
    your device listed.
